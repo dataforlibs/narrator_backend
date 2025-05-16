@@ -3,631 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emotion Detector</title>
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <title>TensorFlow.js Model Demo</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f9f9f9;
+            line-height: 1.6;
         }
-        
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
         .container {
-            background-color: white;
-            border: 1px solid #ddd;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        
-        textarea {
-            width: 100%;
-            padding: 12px;
-            margin: 15px 0;
-            min-height: 120px;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-            font-family: inherit;
-            box-sizing: border-box;
-        }
-        
-        #analyze-btn {
-            background-color: #4361ee;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            display: block;
-            margin: 0 auto;
-            transition: background-color 0.3s;
-        }
-        
-        #analyze-btn:hover {
-            background-color: #3a56d4;
-        }
-        
-        #result {
-            margin-top: 25px;
-            padding: 20px;
-            background-color: #f0f7ff;
-            border-radius: 8px;
-            display: none;
-            border-left: 5px solid #4361ee;
-        }
-        
-        .emotion-bar {
-            height: 28px;
-            margin: 10px 0;
-            display: flex;
-            align-items: center;
-        }
-        
-        .emotion-label {
-            width: 100px;
-            display: inline-block;
-            font-weight: 500;
-            color: #444;
-        }
-        
-        .emotion-progress {
-            flex-grow: 1;
-            height: 16px;
-            background-color: #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 0 10px;
-        }
-        
-        .emotion-fill {
-            height: 100%;
-            transition: width 0.6s ease-out;
-        }
-        
-        .emotion-percentage {
-            width: 60px;
-            text-align: right;
-            font-weight: 500;
-        }
-        
-        #loading {
-            display: none;
-            text-align: center;
-            margin: 25px 0;
-        }
-        
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #4361ee;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-bottom: 15px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .status-message {
-            background-color: #e9ecef;
-            padding: 10px;
-            border-radius: 6px;
-            margin: 15px 0;
-            text-align: center;
-            display: none;
-        }
-        
-        .footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 14px;
-            color: #666;
-        }
-        
-        /* Color palette for different emotions */
-        .anger { background-color: #ef476f; }
-        .disgust { background-color: #06d6a0; }
-        .fear { background-color: #118ab2; }
-        .joy { background-color: #ffd166; }
-        .neutral { background-color: #8ecae6; }
-        .sadness { background-color: #8338ec; }
-        .surprise { background-color: #fb8500; }
-        
-        #debug-info {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 6px;
-            font-family: monospace;
-            white-space: pre-wrap;
-            display: none;
-        }
-        
-        #file-upload {
             display: flex;
             flex-direction: column;
-            margin: 20px 0;
-            padding: 15px;
-            border: 2px dashed #ccc;
-            border-radius: 6px;
+            gap: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
             text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
         }
-        
-        #file-upload.active {
-            border-color: #4361ee;
-            background-color: #f0f7ff;
+        #output {
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
         }
-        
-        .upload-label {
-            margin-bottom: 10px;
-            font-weight: 500;
-        }
-        
-        .file-info {
-            margin-top: 10px;
-            font-size: 14px;
-        }
-        
-        .demo-mode {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #fff4e6;
-            border-radius: 6px;
-            border-left: 5px solid #ff9900;
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
     </style>
 </head>
 <body>
-    <h1>Emotion Detector</h1>
     <div class="container">
-        <div id="demo-mode" class="demo-mode">
-            <p><strong>Demo Mode Active:</strong> Using a simplified model. The results are simulated but represent the real behavior of the emotion detection model.</p>
-            <p>To use the full model, upload the ONNX model file below.</p>
+        <div class="card">
+            <h1>TensorFlow.js Model Demo</h1>
+            <p>This page demonstrates how to use a converted ONNX model with TensorFlow.js</p>
+        </div>
+        
+        <div class="card input-section">
+            <h2>Model Input</h2>
+            <p>Configure your input values here:</p>
+            <div>
+                <label for="inputData">Input Data (comma-separated values):</label>
+                <input type="text" id="inputData" value="1,2,3,4" style="width: 100%;">
+            </div>
+            <div>
+                <label for="inputShape">Input Shape (comma-separated dimensions):</label>
+                <input type="text" id="inputShape" value="1,4" style="width: 100%;">
+            </div>
+            <button id="runModel">Run Model</button>
+        </div>
+        
+        <div class="card">
+            <h2>Output</h2>
+            <div id="output">Results will appear here...</div>
         </div>
 
-        <div id="file-upload">
-            <div class="upload-label">Upload ONNX model file (optional)</div>
-            <input type="file" id="model-file" accept=".onnx" />
-            <div class="file-info">Upload your emotion_model.onnx file to use real predictions</div>
+        <div class="card">
+            <h2>Status</h2>
+            <div id="status">Model not loaded yet</div>
         </div>
-        
-        <p>Type or paste text below to analyze the emotional tone:</p>
-        <textarea id="text-input" placeholder="Enter your text here...">I'm so happy to see you again after all these years!</textarea>
-        <button id="analyze-btn">Analyze Emotion</button>
-        
-        <div id="loading">
-            <div class="spinner"></div>
-            <p>Analyzing text...</p>
-        </div>
-        
-        <div id="model-loading" class="status-message">
-            Loading model, please wait... This may take a few moments.
-        </div>
-        
-        <div id="result">
-            <h3>Detected Emotion: <span id="predicted-emotion"></span></h3>
-            <div id="emotion-bars"></div>
-        </div>
-        
-        <div id="debug-info"></div>
     </div>
-    
-    <div class="footer">
-        <p>Using emotion-english-distilroberta-base model | Powered by ONNX Runtime Web</p>
-    </div>
+
+    <!-- Load TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
     
     <script>
-        // Model configuration
-        const MODEL_CONFIG = {
-            sequence_length: 16,
-            id2label: {
-                "0": "anger",
-                "1": "disgust", 
-                "2": "fear", 
-                "3": "joy", 
-                "4": "neutral", 
-                "5": "sadness", 
-                "6": "surprise"
-            },
-            label2color: {
-                "anger": "anger",
-                "disgust": "disgust",
-                "fear": "fear",
-                "joy": "joy",
-                "neutral": "neutral",
-                "sadness": "sadness",
-                "surprise": "surprise"
-            }
-        };
-        
-        // Global variables
-        let model = null;
-        let modelArrayBuffer = null;
-        let usingDemoMode = true;
-        
-        // Debug logging function
-        function logDebug(message) {
-            const debugElement = document.getElementById('debug-info');
-            const timestamp = new Date().toLocaleTimeString();
-            debugElement.textContent += `[${timestamp}] ${message}\n`;
-            console.log(message);
+        // Set status message
+        function setStatus(message) {
+            document.getElementById('status').textContent = message;
         }
-        
-        // Toggle debug info display
-        function toggleDebug() {
-            const debugElement = document.getElementById('debug-info');
-            if (debugElement.style.display === 'block') {
-                debugElement.style.display = 'none';
-            } else {
-                debugElement.style.display = 'block';
-            }
+
+        // Set output message
+        function setOutput(message) {
+            document.getElementById('output').textContent = message;
         }
-        
-        // Calculate softmax
-        function softmax(arr) {
-            const max = Math.max(...arr);
-            const exps = arr.map(x => Math.exp(x - max));
-            const sumExps = exps.reduce((acc, val) => acc + val, 0);
-            return exps.map(exp => exp / sumExps);
+
+        // Parse input data
+        function parseInputData() {
+            const inputDataStr = document.getElementById('inputData').value;
+            const inputShapeStr = document.getElementById('inputShape').value;
+            
+            // Parse data
+            const data = inputDataStr.split(',').map(x => parseFloat(x.trim()));
+            
+            // Parse shape
+            const shape = inputShapeStr.split(',').map(x => parseInt(x.trim()));
+            
+            return { data, shape };
         }
-        
-        // Simple tokenization for demo purposes
-        function simplifiedTokenize(text, maxLength) {
-            // This is a very simplified tokenization just for the demo
-            // Real tokenization would be much more complex
-            
-            // Add BOS token
-            const inputIds = [0];
-            const attentionMask = [1];
-            
-            // Get simple word tokens
-            const tokens = text.toLowerCase().split(/\s+/).slice(0, maxLength - 2);
-            
-            // Assign dummy IDs
-            for (let i = 0; i < tokens.length; i++) {
-                inputIds.push(i + 10);
-                attentionMask.push(1);
-            }
-            
-            // Add EOS token
-            inputIds.push(2);
-            attentionMask.push(1);
-            
-            // Pad to maxLength
-            while (inputIds.length < maxLength) {
-                inputIds.push(1);
-                attentionMask.push(0);
-            }
-            
-            return {
-                inputIds,
-                attentionMask
-            };
-        }
-        
-        // Load ONNX model from array buffer
-        async function loadModelFromArrayBuffer(arrayBuffer) {
+
+        // Load the model
+        async function loadModel() {
+            setStatus('Loading model...');
             try {
-                // Show loading message
-                document.getElementById('model-loading').style.display = 'block';
-                
-                // Set execution providers - preferring WebGL for GPU acceleration
-                const options = {
-                    executionProviders: ['webgl'],
-                    graphOptimizationLevel: 'all'
-                };
-                
-                // Create session from array buffer
-                model = await ort.InferenceSession.create(arrayBuffer, options);
-                logDebug("ONNX model loaded successfully");
-                
-                // Hide loading message and demo mode notice
-                document.getElementById('model-loading').style.display = 'none';
-                document.getElementById('demo-mode').style.display = 'none';
-                
-                // Set mode flag
-                usingDemoMode = false;
-                
+                // Update this path to where your converted model is stored
+                const model = await tf.loadLayersModel('./tfjs_model/model.json');
+                setStatus('Model loaded successfully!');
                 return model;
             } catch (error) {
-                logDebug(`Failed to load ONNX model: ${error.message}`);
-                document.getElementById('model-loading').textContent = 
-                    "Error loading the model. Check debug info for details.";
-                document.getElementById('model-loading').style.display = 'block';
-                throw error;
+                setStatus(`Error loading model: ${error.message}`);
+                console.error('Error loading model:', error);
+                return null;
             }
         }
-        
-        // Demo mode prediction with hardcoded behavior similar to the real model
-        function demoPredictEmotion(text) {
-            // This is a simplified demo prediction that mimics the behavior
-            // of the real model for basic testing purposes
-            
-            // Simple rule-based emotion detection
-            text = text.toLowerCase();
-            
-            // Initialize probabilities
-            const emotions = Object.values(MODEL_CONFIG.id2label);
-            let probabilities = {};
-            emotions.forEach(emotion => {
-                probabilities[emotion] = 0.05; // Base probability
-            });
-            
-            // Boost probabilities based on keywords
-            if (text.match(/happy|joy|wonderful|great|excited|love|glad|delighted/)) {
-                probabilities.joy = 0.6;
-            } else if (text.match(/angry|mad|furious|annoyed|rage|hate/)) {
-                probabilities.anger = 0.6;
-            } else if (text.match(/sad|unhappy|depressed|miserable|upset|crying/)) {
-                probabilities.sadness = 0.6;
-            } else if (text.match(/afraid|scared|worried|nervous|terrified|fear/)) {
-                probabilities.fear = 0.6;
-            } else if (text.match(/disgusted|gross|revolting|nasty|sick/)) {
-                probabilities.disgust = 0.6;
-            } else if (text.match(/surprised|amazed|shocked|astonished|wow/)) {
-                probabilities.surprise = 0.6;
-            } else {
-                probabilities.neutral = 0.6;
-            }
-            
-            // Normalize to ensure sum to 1
-            const total = Object.values(probabilities).reduce((a, b) => a + b, 0);
-            Object.keys(probabilities).forEach(key => {
-                probabilities[key] = probabilities[key] / total;
-            });
-            
-            // Find predicted emotion
-            let maxProb = 0;
-            let predictedEmotion = 'neutral';
-            
-            Object.entries(probabilities).forEach(([emotion, prob]) => {
-                if (prob > maxProb) {
-                    maxProb = prob;
-                    predictedEmotion = emotion;
-                }
-            });
-            
-            return {
-                predictedEmotion: predictedEmotion,
-                probabilities: probabilities
-            };
-        }
-        
-        // Predict emotion using ONNX model or demo mode
-        async function predictEmotion(text) {
-            try {
-                // If in demo mode, use the demo prediction
-                if (usingDemoMode) {
-                    logDebug("Using demo mode prediction");
-                    return demoPredictEmotion(text);
-                }
-                
-                // Ensure model is loaded
-                if (!model && modelArrayBuffer) {
-                    await loadModelFromArrayBuffer(modelArrayBuffer);
-                }
-                
-                if (!model) {
-                    throw new Error("Model not loaded");
-                }
-                
-                // Tokenize text
-                const { inputIds, attentionMask } = simplifiedTokenize(text, MODEL_CONFIG.sequence_length);
-                
-                // Create input tensors
-                const feeds = {
-                    'input_ids': new ort.Tensor('int64', BigInt64Array.from(inputIds.map(n => BigInt(n))), [1, inputIds.length]),
-                    'attention_mask': new ort.Tensor('int64', BigInt64Array.from(attentionMask.map(n => BigInt(n))), [1, attentionMask.length])
-                };
-                
-                // Run inference
-                const results = await model.run(feeds);
-                
-                // Get logits and apply softmax
-                const outputData = results.logits.data;
-                const logits = Array.from(outputData);
-                const probabilities = softmax(logits);
-                
-                // Find predicted emotion
-                let maxProb = 0;
-                let predictedClass = 0;
-                
-                probabilities.forEach((prob, i) => {
-                    if (prob > maxProb) {
-                        maxProb = prob;
-                        predictedClass = i;
-                    }
-                });
-                
-                // Create result object
-                const emotionResult = {
-                    predictedEmotion: MODEL_CONFIG.id2label[predictedClass],
-                    probabilities: {}
-                };
-                
-                // Add all emotion probabilities
-                Object.entries(MODEL_CONFIG.id2label).forEach(([id, label]) => {
-                    emotionResult.probabilities[label] = probabilities[id];
-                });
-                
-                return emotionResult;
-            } catch (error) {
-                logDebug(`Error predicting emotion: ${error.message}`);
-                throw error;
-            }
-        }
-        
-        // Display results in UI
-        function displayResults(result) {
-            // Update predicted emotion
-            const predictedElement = document.getElementById('predicted-emotion');
-            predictedElement.textContent = result.predictedEmotion.charAt(0).toUpperCase() + result.predictedEmotion.slice(1);
-            
-            // Create emotion bars
-            const emotionBarsContainer = document.getElementById('emotion-bars');
-            emotionBarsContainer.innerHTML = '';
-            
-            Object.entries(result.probabilities)
-                .sort((a, b) => b[1] - a[1]) // Sort by probability (descending)
-                .forEach(([emotion, probability]) => {
-                    const percentage = Math.round(probability * 100);
-                    
-                    const barDiv = document.createElement('div');
-                    barDiv.className = 'emotion-bar';
-                    
-                    const label = document.createElement('div');
-                    label.className = 'emotion-label';
-                    label.textContent = emotion.charAt(0).toUpperCase() + emotion.slice(1);
-                    
-                    const progressDiv = document.createElement('div');
-                    progressDiv.className = 'emotion-progress';
-                    
-                    const fillDiv = document.createElement('div');
-                    fillDiv.className = `emotion-fill ${MODEL_CONFIG.label2color[emotion]}`;
-                    fillDiv.style.width = `${percentage}%`;
-                    
-                    const percentageDiv = document.createElement('div');
-                    percentageDiv.className = 'emotion-percentage';
-                    percentageDiv.textContent = `${percentage}%`;
-                    
-                    progressDiv.appendChild(fillDiv);
-                    barDiv.appendChild(label);
-                    barDiv.appendChild(progressDiv);
-                    barDiv.appendChild(percentageDiv);
-                    
-                    emotionBarsContainer.appendChild(barDiv);
-                });
-            
-            // Show results
-            document.getElementById('result').style.display = 'block';
-        }
-        
-        // Handle file upload
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            logDebug(`File selected: ${file.name} (${Math.round(file.size / 1024)} KB)`);
-            
-            // Check if it's an ONNX file
-            if (!file.name.endsWith('.onnx')) {
-                alert('Please select an ONNX model file');
+
+        // Run inference with the model
+        async function runInference() {
+            const model = await loadModel();
+            if (!model) {
+                setOutput('Failed to load model. Check console for errors.');
                 return;
             }
-            
-            // Read the file as array buffer
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    modelArrayBuffer = event.target.result;
-                    logDebug(`Model file read successfully, size: ${Math.round(modelArrayBuffer.byteLength / 1024)} KB`);
-                    
-                    // Show loading message
-                    document.getElementById('model-loading').style.display = 'block';
-                    document.getElementById('model-loading').textContent = 'Loading your model, please wait...';
-                    
-                    // Reset model state
-                    model = null;
-                    
-                    // Load model in the background
-                    await loadModelFromArrayBuffer(modelArrayBuffer);
-                    
-                    // Update UI
-                    document.querySelector('.file-info').textContent = `Model loaded: ${file.name}`;
-                } catch (error) {
-                    logDebug(`Error loading model file: ${error.message}`);
-                    alert('Error loading the model file. See debug info for details.');
-                }
-            };
-            
-            reader.onerror = (error) => {
-                logDebug(`Error reading file: ${error}`);
-                alert('Error reading the file');
-            };
-            
-            reader.readAsArrayBuffer(file);
+
+            try {
+                // Get input data
+                const { data, shape } = parseInputData();
+                
+                // Create tensor
+                const inputTensor = tf.tensor(data, shape);
+                
+                // Run prediction
+                setOutput('Running inference...');
+                const startTime = performance.now();
+                
+                const result = model.predict(inputTensor);
+                
+                // Get the result data
+                const outputData = await result.data();
+                const endTime = performance.now();
+                
+                // Format the output
+                let outputStr = 'Prediction results:\n\n';
+                outputStr += JSON.stringify(Array.from(outputData), null, 2);
+                outputStr += `\n\nInference time: ${(endTime - startTime).toFixed(2)}ms`;
+                
+                setOutput(outputStr);
+                
+                // Clean up tensors
+                inputTensor.dispose();
+                result.dispose();
+                
+            } catch (error) {
+                setOutput(`Error during inference: ${error.message}`);
+                console.error('Inference error:', error);
+            }
         }
-        
-        // Add event listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            // Setup file upload
-            const fileInput = document.getElementById('model-file');
-            fileInput.addEventListener('change', handleFileUpload);
+
+        // Set up event listeners when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('runModel').addEventListener('click', runInference);
             
-            // Setup drag and drop for file upload area
-            const uploadArea = document.getElementById('file-upload');
-            
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('active');
-            });
-            
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('active');
-            });
-            
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('active');
-                
-                if (e.dataTransfer.files.length) {
-                    fileInput.files = e.dataTransfer.files;
-                    const event = new Event('change');
-                    fileInput.dispatchEvent(event);
-                }
-            });
-            
-            // Add debug toggle to footer
-            const footer = document.querySelector('.footer p');
-            footer.innerHTML += ' | <a href="#" id="toggle-debug">Toggle Debug Info</a>';
-            document.getElementById('toggle-debug').addEventListener('click', (e) => {
-                e.preventDefault();
-                toggleDebug();
-            });
-            
-            // Analyze button
-            document.getElementById('analyze-btn').addEventListener('click', async () => {
-                const textInput = document.getElementById('text-input').value.trim();
-                
-                if (!textInput) {
-                    alert('Please enter some text to analyze');
-                    return;
-                }
-                
-                // Show loading
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('result').style.display = 'none';
-                
-                try {
-                    // Predict and display results
-                    const result = await predictEmotion(textInput);
-                    displayResults(result);
-                    logDebug(`Analysis completed: ${result.predictedEmotion} (${Math.round(result.probabilities[result.predictedEmotion] * 100)}%)`);
-                } catch (error) {
-                    logDebug(`Error analyzing text: ${error.message}`);
-                    alert('An error occurred while analyzing the text. See debug info for details.');
-                } finally {
-                    // Hide loading
-                    document.getElementById('loading').style.display = 'none';
-                }
-            });
-            
-            // Initial log
-            logDebug("Emotion Detector initialized in demo mode");
+            // Attempt to load the model when the page loads
+            loadModel();
         });
     </script>
 </body>
