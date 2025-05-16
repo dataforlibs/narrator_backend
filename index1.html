@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorFlow.js Model Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #output {
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>TensorFlow.js Model Demo</h1>
+            <p>This page demonstrates how to use a converted ONNX model with TensorFlow.js</p>
+        </div>
+        
+        <div class="card input-section">
+            <h2>Model Input</h2>
+            <p>Configure your input values here:</p>
+            <div>
+                <label for="inputData">Input Data (comma-separated values):</label>
+                <input type="text" id="inputData" value="1,2,3,4" style="width: 100%;">
+            </div>
+            <div>
+                <label for="inputShape">Input Shape (comma-separated dimensions):</label>
+                <input type="text" id="inputShape" value="1,4" style="width: 100%;">
+            </div>
+            <button id="runModel">Run Model</button>
+        </div>
+        
+        <div class="card">
+            <h2>Output</h2>
+            <div id="output">Results will appear here...</div>
+        </div>
+
+        <div class="card">
+            <h2>Status</h2>
+            <div id="status">Model not loaded yet</div>
+        </div>
+    </div>
+
+    <!-- Load TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
+    
+    <script>
+        // Set status message
+        function setStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        // Set output message
+        function setOutput(message) {
+            document.getElementById('output').textContent = message;
+        }
+
+        // Parse input data
+        function parseInputData() {
+            const inputDataStr = document.getElementById('inputData').value;
+            const inputShapeStr = document.getElementById('inputShape').value;
+            
+            // Parse data
+            const data = inputDataStr.split(',').map(x => parseFloat(x.trim()));
+            
+            // Parse shape
+            const shape = inputShapeStr.split(',').map(x => parseInt(x.trim()));
+            
+            return { data, shape };
+        }
+
+        // Load the model
+        async function loadModel() {
+            setStatus('Loading model...');
+            try {
+                // Update this path to where your converted model is stored
+                const model = await tf.loadLayersModel('./tfjs_model/model.json');
+                setStatus('Model loaded successfully!');
+                return model;
+            } catch (error) {
+                setStatus(`Error loading model: ${error.message}`);
+                console.error('Error loading model:', error);
+                return null;
+            }
+        }
+
+        // Run inference with the model
+        async function runInference() {
+            const model = await loadModel();
+            if (!model) {
+                setOutput('Failed to load model. Check console for errors.');
+                return;
+            }
+
+            try {
+                // Get input data
+                const { data, shape } = parseInputData();
+                
+                // Create tensor
+                const inputTensor = tf.tensor(data, shape);
+                
+                // Run prediction
+                setOutput('Running inference...');
+                const startTime = performance.now();
+                
+                const result = model.predict(inputTensor);
+                
+                // Get the result data
+                const outputData = await result.data();
+                const endTime = performance.now();
+                
+                // Format the output
+                let outputStr = 'Prediction results:\n\n';
+                outputStr += JSON.stringify(Array.from(outputData), null, 2);
+                outputStr += `\n\nInference time: ${(endTime - startTime).toFixed(2)}ms`;
+                
+                setOutput(outputStr);
+                
+                // Clean up tensors
+                inputTensor.dispose();
+                result.dispose();
+                
+            } catch (error) {
+                setOutput(`Error during inference: ${error.message}`);
+                console.error('Inference error:', error);
+            }
+        }
+
+        // Set up event listeners when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('runModel').addEventListener('click', runInference);
+            
+            // Attempt to load the model when the page loads
+            loadModel();
+        });
+    </script>
+</body>
+</html>
