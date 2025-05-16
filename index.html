@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ONNX Inference Example</title>
 
-    <!-- Load ONNX Runtime with alternative CDN source -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/ort.min.js"></script>
+    <!-- Load ONNX Runtime with updated version -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.0/dist/ort.min.js"></script>
     
-    <!-- Fallback script to load from another CDN if the first one fails -->
+    <!-- Fallback script with updated version -->
     <script>
         window.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 if (typeof ort === 'undefined') {
                     console.log('Trying alternative ONNX Runtime source...');
                     var script = document.createElement('script');
-                    script.src = 'https://unpkg.com/onnxruntime-web@1.14.0/dist/ort.min.js';
+                    script.src = 'https://unpkg.com/onnxruntime-web@1.16.0/dist/ort.min.js';
                     script.onload = function() {
                         console.log('Alternative ONNX Runtime loaded');
                         if (typeof ort !== 'undefined') {
@@ -36,6 +36,10 @@
             <textarea id="inputText" rows="4" cols="50" placeholder="Enter text to analyze...">This is a test sentence.</textarea>
             <button id="analyzeBtn" disabled>Analyze</button>
         </div>
+        <div class="model-section">
+            <p>Model not loaded yet. Make sure your ONNX file is accessible at the correct URL.</p>
+            <p>Current model URL: <code id="modelUrlDisplay">emotion_model.onnx</code> <button id="editModelUrl">Edit URL</button></p>
+        </div>
         <div class="results-section">
             <h2>Results:</h2>
             <div id="output">Please enter text and click Analyze.</div>
@@ -49,6 +53,7 @@
         const emotionLabels = [
             "joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"
         ];
+        let modelUrl = 'emotion_model.onnx'; // Default model URL
         
         // Simple vocabulary for tokenization - this should match your model's vocabulary
         // Note: In a real application, you would use the same tokenizer used during training
@@ -79,6 +84,16 @@
                         'ONNX Runtime failed to load. Please refresh the page or try another browser.';
                 }
             }, 1000);
+
+            // Add listener for editing model URL
+            document.getElementById('editModelUrl').addEventListener('click', function() {
+                const newUrl = prompt('Enter the URL or path to your ONNX model:', modelUrl);
+                if (newUrl && newUrl.trim() !== '') {
+                    modelUrl = newUrl.trim();
+                    document.getElementById('modelUrlDisplay').textContent = modelUrl;
+                    document.getElementById('output').textContent = 'Model URL updated. Click Analyze to test with the new model.';
+                }
+            });
         });
 
         // Initialize the application
@@ -117,17 +132,43 @@
                 throw new Error(errorMsg);
             }
 
-            // 1. Load the ONNX model (fetch from a URL)
-            const modelUrl = 'emotion_model.onnx';
             try {
                 // Display loading status
                 document.getElementById('output').textContent = 'Loading model...';
                 
-                // Create inference session
-                const session = await ort.InferenceSession.create(modelUrl);
+                // Set WebAssembly execution provider options
+                const options = {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all',
+                    enableCpuMemArena: true,
+                    logSeverityLevel: 0,
+                };
+                
+                // Initialize session with try-catch and timeout
+                let sessionPromise = new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Loading model timed out after 30 seconds'));
+                    }, 30000);
+                    
+                    ort.InferenceSession.create(modelUrl, options)
+                        .then(session => {
+                            clearTimeout(timeout);
+                            resolve(session);
+                        })
+                        .catch(err => {
+                            clearTimeout(timeout);
+                            reject(err);
+                        });
+                });
+                
+                const session = await sessionPromise;
                 
                 // Update status
                 document.getElementById('output').textContent = 'Processing text...';
+                
+                // Log model input and output information
+                console.log('Model inputs:', session.inputNames);
+                console.log('Model outputs:', session.outputNames);
                 
                 // 2. Preprocess the input text
                 const inputData = preprocess(text);
@@ -136,13 +177,11 @@
                 const feeds = {};
                 feeds[session.inputNames[0]] = inputData.inputTensor;
                 
-                // If the model requires attention mask
-                if (session.inputNames.length > 1) {
+                // If the model requires attention mask and it's in the input names
+                if (session.inputNames.length > 1 && session.inputNames[1].includes('attention') || 
+                    session.inputNames[1] === 'mask' || session.inputNames[1] === 'attention_mask') {
                     feeds[session.inputNames[1]] = inputData.attentionMask;
                 }
-                
-                // Check input names for debugging
-                console.log('Model input names:', session.inputNames);
                 
                 const results = await session.run(feeds);
                 
@@ -155,14 +194,43 @@
                     <div class="prediction-result">
                         <p><strong>Detected emotion:</strong> ${prediction.label}</p>
                         <p><strong>Confidence:</strong> ${(prediction.confidence * 100).toFixed(2)}%</p>
+                        <h3>All Emotions:</h3>
+                        <ul>
+                            ${prediction.allProbabilities.map((prob, idx) => {
+                                const label = idx < prediction.allLabels.length ? 
+                                    prediction.allLabels[idx] : `Class ${idx}`;
+                                return `<li>${label}: ${(prob * 100).toFixed(2)}%</li>`;
+                            }).join('')}
+                        </ul>
                     </div>
                 `;
                 
                 return prediction;
             } catch (error) {
                 console.error('Error during inference:', error);
-                document.getElementById('output').textContent = 'Error: ' + error.message;
-                throw error;
+                
+                // Provide more helpful error messages based on common problems
+                let errorMessage = error.message;
+                if (error.message.includes('protobuf parsing failed')) {
+                    errorMessage = 'Invalid ONNX model format or model file not accessible. Please check if the model URL is correct and the model is properly formatted. Make sure your model is accessible via the current domain (CORS policy).';
+                } else if (error.message.includes('Can\'t create a session')) {
+                    errorMessage = 'Failed to initialize ONNX session. This may be due to an incompatible model format, insufficient memory, or browser limitations. Try a smaller model or checking browser console for specific errors.';
+                }
+                
+                document.getElementById('output').innerHTML = `
+                    <div class="error-message">
+                        <p><strong>Error:</strong> ${errorMessage}</p>
+                        <p>Troubleshooting tips:</p>
+                        <ul>
+                            <li>Check if the model URL is correct</li>
+                            <li>Ensure the model is accessible from this domain (CORS issues)</li>
+                            <li>Verify the model format is compatible with ONNX Runtime Web</li>
+                            <li>Try using a smaller or simpler model</li>
+                            <li>Check browser console for additional error details</li>
+                        </ul>
+                    </div>
+                `;
+                throw new Error(errorMessage);
             }
         }
 
@@ -190,9 +258,19 @@
             console.log('Input tensor shape:', [1, maxLength]);
             console.log('First few values:', paddedIds.slice(0, 5));
             
-            // Create input tensors
-            const inputTensor = new ort.Tensor('int64', new BigInt64Array(paddedIds.map(x => BigInt(x))), [1, maxLength]);
-            const attentionMaskTensor = new ort.Tensor('int64', new BigInt64Array(attentionMask.map(x => BigInt(x))), [1, maxLength]);
+            // Create input tensors - safeguarding against errors
+            let inputTensor, attentionMaskTensor;
+            
+            try {
+                // Try first with int64 type (common for transformers)
+                inputTensor = new ort.Tensor('int64', new BigInt64Array(paddedIds.map(x => BigInt(x))), [1, maxLength]);
+                attentionMaskTensor = new ort.Tensor('int64', new BigInt64Array(attentionMask.map(x => BigInt(x))), [1, maxLength]);
+            } catch (err) {
+                console.warn('Failed to create int64 tensors, falling back to int32:', err);
+                // Fall back to int32 (for models that expect int32 inputs)
+                inputTensor = new ort.Tensor('int32', new Int32Array(paddedIds), [1, maxLength]);
+                attentionMaskTensor = new ort.Tensor('int32', new Int32Array(attentionMask), [1, maxLength]);
+            }
             
             return {
                 inputTensor: inputTensor,
@@ -274,8 +352,12 @@
             text-align: center;
         }
         
-        .input-section {
+        .input-section, .model-section {
             margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #eee;
         }
         
         textarea {
@@ -298,6 +380,12 @@
             font-size: 16px;
         }
         
+        #editModelUrl {
+            background-color: #2196F3;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
@@ -305,6 +393,10 @@
         
         button:hover:not(:disabled) {
             background-color: #45a049;
+        }
+        
+        #editModelUrl:hover:not(:disabled) {
+            background-color: #0b7dda;
         }
         
         .results-section {
@@ -343,6 +435,21 @@
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
         }
     </style>
 </body>
