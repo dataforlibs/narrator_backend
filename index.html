@@ -177,7 +177,7 @@
     <script>
         // Model paths and configuration
         const MODEL_CONFIG = {
-            onnx_path: 'emotion_model.onnx',
+            onnx_path: './emotion_model.onnx',
             sequence_length: 16,
             id2label: {
                 "0": "anger",
@@ -217,7 +217,7 @@
             // Load vocab if not already loaded
             if (!vocabMap) {
                 try {
-                    const response = await fetch('emotion_tokenizer/vocab.json');
+                    const response = await fetch('./emotion_tokenizer/vocab.json');
                     vocabMap = await response.json();
                 } catch (error) {
                     console.error("Error loading vocabulary:", error);
