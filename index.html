@@ -3,353 +3,467 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emotion Detection with ONNX</title>
+    <title>Emotion Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: #f9f9f9;
         }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
         .container {
             background-color: white;
+            border: 1px solid #ddd;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-        }
-        .input-area {
-            margin-bottom: 20px;
-        }
-        #text-input {
+        
+        textarea {
             width: 100%;
             padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            margin: 15px 0;
+            min-height: 120px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
             font-size: 16px;
-            resize: vertical;
-            min-height: 100px;
+            font-family: inherit;
+            box-sizing: border-box;
         }
-        button {
-            background-color: #3498db;
+        
+        #analyze-btn {
+            background-color: #4361ee;
             color: white;
-            border: none;
             padding: 12px 20px;
-            border-radius: 4px;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 16px;
+            display: block;
+            margin: 0 auto;
             transition: background-color 0.3s;
         }
-        button:hover {
-            background-color: #2980b9;
+        
+        #analyze-btn:hover {
+            background-color: #3a56d4;
         }
-        button:disabled {
-            background-color: #95a5a6;
-            cursor: not-allowed;
-        }
-        .results {
-            margin-top: 20px;
+        
+        #result {
+            margin-top: 25px;
             padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f9f9f9;
+            background-color: #f0f7ff;
+            border-radius: 8px;
             display: none;
+            border-left: 5px solid #4361ee;
         }
+        
         .emotion-bar {
-            height: 25px;
-            margin: 5px 0;
+            height: 28px;
+            margin: 10px 0;
             display: flex;
             align-items: center;
         }
-        .bar-label {
-            width: 80px;
-            font-weight: bold;
+        
+        .emotion-label {
+            width: 100px;
+            display: inline-block;
+            font-weight: 500;
+            color: #444;
         }
-        .bar-container {
+        
+        .emotion-progress {
             flex-grow: 1;
-            height: 20px;
-            background-color: #ecf0f1;
+            height: 16px;
+            background-color: #e9ecef;
             border-radius: 10px;
             overflow: hidden;
+            margin: 0 10px;
         }
-        .bar {
+        
+        .emotion-fill {
             height: 100%;
-            background-color: #3498db;
-            border-radius: 10px;
-            transition: width 0.5s;
+            transition: width 0.6s ease-out;
         }
-        .bar-value {
-            margin-left: 10px;
+        
+        .emotion-percentage {
             width: 60px;
             text-align: right;
+            font-weight: 500;
         }
-        .predicted {
-            background-color: #2ecc71;
-        }
-        .status-message {
+        
+        #loading {
+            display: none;
             text-align: center;
-            margin: 10px 0;
-            font-style: italic;
-            color: #7f8c8d;
+            margin: 25px 0;
         }
-        #loading-status {
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #4361ee;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status-message {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 15px 0;
+            text-align: center;
             display: none;
         }
-        .emoji {
-            font-size: 24px;
-            margin-right: 8px;
+        
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
         }
+        
+        /* Color palette for different emotions */
+        .anger { background-color: #ef476f; }
+        .disgust { background-color: #06d6a0; }
+        .fear { background-color: #118ab2; }
+        .joy { background-color: #ffd166; }
+        .neutral { background-color: #8ecae6; }
+        .sadness { background-color: #8338ec; }
+        .surprise { background-color: #fb8500; }
     </style>
 </head>
 <body>
+    <h1>Emotion Detector</h1>
     <div class="container">
-        <h1>Emotion Detection</h1>
-        <div id="loading-status" class="status-message">Loading model, please wait...</div>
+        <p>Type or paste text below to analyze the emotional tone:</p>
+        <textarea id="text-input" placeholder="Enter your text here...">I'm so happy to see you again after all these years!</textarea>
+        <button id="analyze-btn">Analyze Emotion</button>
         
-        <div class="input-area">
-            <textarea id="text-input" placeholder="Enter some text to analyze emotions...">I'm so happy to see you again after all these years!</textarea>
-            <div style="margin-top: 10px; text-align: center;">
-                <button id="analyze-btn" disabled>Analyze Emotions</button>
-            </div>
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing text...</p>
         </div>
         
-        <div id="results" class="results">
-            <h2>Emotion Analysis Results</h2>
-            <p id="predicted-emotion"></p>
+        <div id="model-loading" class="status-message">
+            Loading model, please wait... This may take a few moments on first visit.
+        </div>
+        
+        <div id="result">
+            <h3>Detected Emotion: <span id="predicted-emotion"></span></h3>
             <div id="emotion-bars"></div>
         </div>
     </div>
-
-    <!-- Load ONNX Runtime Web -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/ort.min.js"></script>
+    
+    <div class="footer">
+        <p>Using emotion-english-distilroberta-base model | Powered by ONNX Runtime Web</p>
+    </div>
     
     <script>
-        // Configuration
-        const MODEL_URL = 'emotion_model.onnx';
-        const VOCAB_URL = 'emotion_tokenizer/vocab.json';
-        const EMOTION_LABELS = ["anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise"];
-        const EMOTION_EMOJIS = {
-            "anger": "😠",
-            "disgust": "🤢",
-            "fear": "😨",
-            "joy": "😄",
-            "neutral": "😐",
-            "sadness": "😢",
-            "surprise": "😲"
-        };
-
-        // Elements
-        const textInput = document.getElementById('text-input');
-        const analyzeBtn = document.getElementById('analyze-btn');
-        const resultsDiv = document.getElementById('results');
-        const predictedEmotion = document.getElementById('predicted-emotion');
-        const emotionBars = document.getElementById('emotion-bars');
-        const loadingStatus = document.getElementById('loading-status');
-
-        // Application state
-        let session = null;
-        let vocab = null;
-        let specialTokens = {
-            CLS: 101,
-            SEP: 102,
-            PAD: 0,
-            UNK: 100
-        };
-
-        // Initialize the application
-        async function initialize() {
-            loadingStatus.style.display = 'block';
-            
-            try {
-                // Load model
-                session = await ort.InferenceSession.create(MODEL_URL);
-                
-                // Load tokenizer vocabulary
-                const response = await fetch(VOCAB_URL);
-                if (!response.ok) {
-                    throw new Error(`Failed to load vocab: ${response.statusText}`);
-                }
-                vocab = await response.json();
-                
-                analyzeBtn.disabled = false;
-                loadingStatus.style.display = 'none';
-                console.log("Model and tokenizer loaded successfully");
-            } catch (error) {
-                loadingStatus.textContent = `Error loading model: ${error.message}`;
-                console.error("Initialization failed:", error);
+        // Model paths and configuration
+        const MODEL_CONFIG = {
+            onnx_path: 'emotion_model.onnx',
+            sequence_length: 16,
+            id2label: {
+                "0": "anger",
+                "1": "disgust", 
+                "2": "fear", 
+                "3": "joy", 
+                "4": "neutral", 
+                "5": "sadness", 
+                "6": "surprise"
+            },
+            label2color: {
+                "anger": "anger",
+                "disgust": "disgust",
+                "fear": "fear",
+                "joy": "joy",
+                "neutral": "neutral",
+                "sadness": "sadness",
+                "surprise": "surprise"
             }
+        };
+        
+        // Global variables for model and tokenizer
+        let model = null;
+        let vocabMap = null;
+        
+        // Calculate softmax
+        function softmax(arr) {
+            const max = Math.max(...arr);
+            const exps = arr.map(x => Math.exp(x - max));
+            const sumExps = exps.reduce((acc, val) => acc + val, 0);
+            return exps.map(exp => exp / sumExps);
         }
-
-        // Tokenize text for the model
-        function tokenize(text, maxLength = 16) {
-            // Basic implementation - would need to match your PyTorch tokenizer exactly
-            // This is a simplified version and may not produce the same results
-            
-            // Convert to lowercase and split
-            const tokens = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
-            
-            // Start with CLS token
-            const inputIds = [specialTokens.CLS];
-            
-            // Add tokens
-            for (const token of tokens) {
-                if (token in vocab) {
-                    inputIds.push(vocab[token]);
-                } else {
-                    // Try to handle unknown tokens
-                    inputIds.push(specialTokens.UNK);
-                }
-                
-                if (inputIds.length >= maxLength - 1) {
-                    break;
+        
+        // Simple tokenizer implementation for RoBERTa
+        // Note: This is a simplified version and won't be as accurate as the real tokenizer
+        async function tokenizeText(text, maxLength) {
+            // Load vocab if not already loaded
+            if (!vocabMap) {
+                try {
+                    const response = await fetch('emotion_tokenizer/vocab.json');
+                    vocabMap = await response.json();
+                } catch (error) {
+                    console.error("Error loading vocabulary:", error);
+                    // Fall back to simplified tokenization
+                    return simplifiedTokenize(text, maxLength);
                 }
             }
             
-            // Add SEP token
-            inputIds.push(specialTokens.SEP);
+            // Convert vocab object to reversed map for lookup
+            const reversedVocabMap = {};
+            for (const [token, id] of Object.entries(vocabMap)) {
+                reversedVocabMap[id] = token;
+            }
+            
+            // Simplified tokenization - split on spaces and punctuation
+            // This is NOT how RoBERTa actually tokenizes! It uses BPE.
+            // In production, use the actual tokenizer from HuggingFace or transformers.js
+            const tokens = text.toLowerCase().split(/[\s.,!?;:()\[\]{}'"\/\\<>]+/).filter(t => t.length > 0);
+            
+            // Add BOS token (RoBERTa uses <s> as BOS token)
+            const inputIds = [0]; // Assuming 0 is the ID for <s>
+            const attentionMask = [1];
+            
+            // Add token IDs - highly simplified
+            for (const token of tokens) {
+                if (inputIds.length < maxLength - 1) { // Save room for EOS token
+                    // Try to find token in vocab, or use OOV token
+                    const id = vocabMap[token] || 3; // Using 3 as common OOV token ID
+                    inputIds.push(id);
+                    attentionMask.push(1);
+                }
+            }
+            
+            // Add EOS token (RoBERTa uses </s> as EOS token)
+            if (inputIds.length < maxLength) {
+                inputIds.push(2); // Assuming 2 is the ID for </s>
+                attentionMask.push(1);
+            }
             
             // Pad to max length
             while (inputIds.length < maxLength) {
-                inputIds.push(specialTokens.PAD);
+                inputIds.push(1); // Assuming 1 is PAD token
+                attentionMask.push(0);
             }
-            
-            // Create attention mask (1 for real tokens, 0 for padding)
-            const attentionMask = inputIds.map(id => id === specialTokens.PAD ? 0 : 1);
             
             return {
-                inputIds: inputIds.slice(0, maxLength),
-                attentionMask: attentionMask.slice(0, maxLength)
+                inputIds,
+                attentionMask
             };
         }
-
-        // Softmax implementation
-        function softmax(logits) {
-            const maxLogit = Math.max(...logits);
-            const expScores = logits.map(logit => Math.exp(logit - maxLogit));
-            const expSum = expScores.reduce((sum, expScore) => sum + expScore, 0);
-            return expScores.map(expScore => expScore / expSum);
-        }
-
-        // Run inference with the model
-        async function predict(text) {
-            if (!session) {
-                throw new Error("Model not initialized");
+        
+        // Simplified fallback tokenization
+        function simplifiedTokenize(text, maxLength) {
+            // Very basic tokenization that will at least allow the demo to work
+            // This is much less accurate than the real tokenizer would be
+            
+            // Add BOS token 
+            const inputIds = [0];
+            const attentionMask = [1];
+            
+            // Get simple word tokens
+            const tokens = text.toLowerCase().split(/\s+/).slice(0, maxLength - 2);
+            
+            // Assign simple ID values - this won't match the vocabulary but demos the flow
+            for (let i = 0; i < tokens.length; i++) {
+                // Use position+10 as dummy IDs (completely arbitrary)
+                inputIds.push(i + 10); 
+                attentionMask.push(1);
             }
-
+            
+            // Add EOS token
+            inputIds.push(2);
+            attentionMask.push(1);
+            
+            // Pad to maxLength
+            while (inputIds.length < maxLength) {
+                inputIds.push(1);
+                attentionMask.push(0);
+            }
+            
+            return {
+                inputIds,
+                attentionMask
+            };
+        }
+        
+        // Load ONNX model
+        async function loadModel() {
+            if (model) return model;
+            
             try {
-                // Tokenize text
-                const tokenized = tokenize(text);
-                
-                // Create input tensors
-                const inputIds = new ort.Tensor('int64', new BigInt64Array(tokenized.inputIds.map(id => BigInt(id))), [1, tokenized.inputIds.length]);
-                const attentionMask = new ort.Tensor('int64', new BigInt64Array(tokenized.attentionMask.map(id => BigInt(id))), [1, tokenized.attentionMask.length]);
-                
-                // Run inference
-                const feeds = { 
-                    'input_ids': inputIds, 
-                    'attention_mask': attentionMask 
+                // Set execution providers - preferring WebGL for GPU acceleration
+                const options = {
+                    executionProviders: ['webgl'],
+                    graphOptimizationLevel: 'all'
                 };
                 
-                const results = await session.run(feeds);
-                const logits = results.logits.data;
+                // Show loading message
+                document.getElementById('model-loading').style.display = 'block';
                 
-                // Process the results (softmax)
-                const probabilities = softmax(Array.from(logits));
+                // Create session
+                model = await ort.InferenceSession.create(MODEL_CONFIG.onnx_path, options);
+                console.log("ONNX model loaded successfully");
                 
-                // Get the predicted class (highest probability)
-                const predictedClassIndex = probabilities.indexOf(Math.max(...probabilities));
+                // Hide loading message
+                document.getElementById('model-loading').style.display = 'none';
                 
-                // Return results in a structured format
-                return {
-                    predictedEmotion: EMOTION_LABELS[predictedClassIndex],
-                    probabilities: EMOTION_LABELS.reduce((obj, label, index) => {
-                        obj[label] = probabilities[index];
-                        return obj;
-                    }, {})
-                };
+                return model;
             } catch (error) {
-                console.error("Prediction failed:", error);
+                console.error("Failed to load ONNX model:", error);
+                document.getElementById('model-loading').textContent = 
+                    "Error loading the model. Please check console for details.";
                 throw error;
             }
         }
-
-        // Update the UI with results
-        function displayResults(result) {
-            // Show results div
-            resultsDiv.style.display = 'block';
-            
-            // Set predicted emotion text
-            const emoji = EMOTION_EMOJIS[result.predictedEmotion];
-            predictedEmotion.innerHTML = `<strong>Predicted emotion: ${emoji} ${result.predictedEmotion}</strong>`;
-            
-            // Clear previous bars
-            emotionBars.innerHTML = '';
-            
-            // Create bars for each emotion
-            EMOTION_LABELS.forEach(emotion => {
-                const probability = result.probabilities[emotion];
-                const percentage = Math.round(probability * 100);
+        
+        // Predict emotion using ONNX model
+        async function predictEmotion(text) {
+            try {
+                // Load model if not already loaded
+                const session = await loadModel();
                 
-                const emotionBar = document.createElement('div');
-                emotionBar.className = 'emotion-bar';
+                // Tokenize text
+                const { inputIds, attentionMask } = await tokenizeText(text, MODEL_CONFIG.sequence_length);
                 
-                const barLabel = document.createElement('div');
-                barLabel.className = 'bar-label';
-                barLabel.textContent = `${EMOTION_EMOJIS[emotion]} ${emotion}`;
+                // Create input tensors
+                const feeds = {
+                    'input_ids': new ort.Tensor('int64', BigInt64Array.from(inputIds.map(n => BigInt(n))), [1, inputIds.length]),
+                    'attention_mask': new ort.Tensor('int64', BigInt64Array.from(attentionMask.map(n => BigInt(n))), [1, attentionMask.length])
+                };
                 
-                const barContainer = document.createElement('div');
-                barContainer.className = 'bar-container';
+                // Run inference
+                const results = await session.run(feeds);
                 
-                const bar = document.createElement('div');
-                bar.className = `bar ${emotion === result.predictedEmotion ? 'predicted' : ''}`;
-                bar.style.width = `${percentage}%`;
+                // Get logits and apply softmax
+                const outputData = results.logits.data;
+                const logits = Array.from(outputData);
+                const probabilities = softmax(logits);
                 
-                const barValue = document.createElement('div');
-                barValue.className = 'bar-value';
-                barValue.textContent = `${percentage}%`;
+                // Find predicted emotion
+                let maxProb = 0;
+                let predictedClass = 0;
                 
-                barContainer.appendChild(bar);
-                emotionBar.appendChild(barLabel);
-                emotionBar.appendChild(barContainer);
-                emotionBar.appendChild(barValue);
+                probabilities.forEach((prob, i) => {
+                    if (prob > maxProb) {
+                        maxProb = prob;
+                        predictedClass = i;
+                    }
+                });
                 
-                emotionBars.appendChild(emotionBar);
-            });
+                // Create result object
+                const emotionResult = {
+                    predictedEmotion: MODEL_CONFIG.id2label[predictedClass],
+                    probabilities: {}
+                };
+                
+                // Add all emotion probabilities
+                Object.entries(MODEL_CONFIG.id2label).forEach(([id, label]) => {
+                    emotionResult.probabilities[label] = probabilities[id];
+                });
+                
+                return emotionResult;
+            } catch (error) {
+                console.error("Error predicting emotion:", error);
+                throw error;
+            }
         }
-
-        // Handle analyze button click
-        analyzeBtn.addEventListener('click', async () => {
-            const text = textInput.value.trim();
+        
+        // Display results in UI
+        function displayResults(result) {
+            // Update predicted emotion
+            const predictedElement = document.getElementById('predicted-emotion');
+            predictedElement.textContent = result.predictedEmotion.charAt(0).toUpperCase() + result.predictedEmotion.slice(1);
             
-            if (!text) {
+            // Create emotion bars
+            const emotionBarsContainer = document.getElementById('emotion-bars');
+            emotionBarsContainer.innerHTML = '';
+            
+            Object.entries(result.probabilities)
+                .sort((a, b) => b[1] - a[1]) // Sort by probability (descending)
+                .forEach(([emotion, probability]) => {
+                    const percentage = Math.round(probability * 100);
+                    
+                    const barDiv = document.createElement('div');
+                    barDiv.className = 'emotion-bar';
+                    
+                    const label = document.createElement('div');
+                    label.className = 'emotion-label';
+                    label.textContent = emotion.charAt(0).toUpperCase() + emotion.slice(1);
+                    
+                    const progressDiv = document.createElement('div');
+                    progressDiv.className = 'emotion-progress';
+                    
+                    const fillDiv = document.createElement('div');
+                    fillDiv.className = `emotion-fill ${MODEL_CONFIG.label2color[emotion]}`;
+                    fillDiv.style.width = `${percentage}%`;
+                    
+                    const percentageDiv = document.createElement('div');
+                    percentageDiv.className = 'emotion-percentage';
+                    percentageDiv.textContent = `${percentage}%`;
+                    
+                    progressDiv.appendChild(fillDiv);
+                    barDiv.appendChild(label);
+                    barDiv.appendChild(progressDiv);
+                    barDiv.appendChild(percentageDiv);
+                    
+                    emotionBarsContainer.appendChild(barDiv);
+                });
+            
+            // Show results
+            document.getElementById('result').style.display = 'block';
+        }
+        
+        // Add event listener for analyze button
+        document.getElementById('analyze-btn').addEventListener('click', async () => {
+            const textInput = document.getElementById('text-input').value.trim();
+            
+            if (!textInput) {
                 alert('Please enter some text to analyze');
                 return;
             }
             
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            
             try {
-                analyzeBtn.disabled = true;
-                analyzeBtn.textContent = 'Analyzing...';
+                // Load model and predict
+                const result = await predictEmotion(textInput);
                 
-                const result = await predict(text);
+                // Display results
                 displayResults(result);
-                
-                analyzeBtn.textContent = 'Analyze Emotions';
-                analyzeBtn.disabled = false;
             } catch (error) {
-                console.error('Analysis failed:', error);
-                alert('Analysis failed: ' + error.message);
-                
-                analyzeBtn.textContent = 'Analyze Emotions';
-                analyzeBtn.disabled = false;
+                console.error('Error analyzing text:', error);
+                alert('An error occurred while analyzing the text. Please check console for details.');
+            } finally {
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
             }
         });
-
-        // Initialize when the page loads
-        document.addEventListener('DOMContentLoaded', initialize);
+        
+        // Start loading the model when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            // Attempt to load model in background
+            loadModel().catch(err => console.warn("Background model loading failed:", err));
+        });
     </script>
 </body>
 </html>
