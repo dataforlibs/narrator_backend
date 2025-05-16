@@ -1,0 +1,28 @@
+from huggingface_hub import create_repo
+
+repo_id = "obuchel1/quantized_emotion_model1"
+create_repo(repo_id)
+
+from huggingface_hub import upload_file
+
+# Path to your ONNX file
+onnx_path = "emotion_model.onnx"
+
+# Upload the ONNX file to the repository
+upload_file(
+    path_or_fileobj=onnx_path,
+    path_in_repo="emotion_model.onnx",
+    repo_id=repo_id
+)
+upload_file(
+    path_or_fileobj="emotion_tokenizer/config.json",
+    path_in_repo="config.json",
+    repo_id=repo_id
+)
+arr=["/Users/necsi/Documents/GitHub/narrator_backend/emotion_tokenizer/merges.txt","/Users/necsi/Documents/GitHub/narrator_backend/emotion_tokenizer/special_tokens_map.json","/Users/necsi/Documents/GitHub/narrator_backend/emotion_tokenizer/tokenizer_config.json","/Users/necsi/Documents/GitHub/narrator_backend/emotion_tokenizer/tokenizer.json","/Users/necsi/Documents/GitHub/narrator_backend/emotion_tokenizer/vocab.json"]
+for ar in arr:
+    upload_file(
+    path_or_fileobj=ar,
+    path_in_repo=ar.split("/")[len(ar.split("/"))-1],
+    repo_id=repo_id
+    )
