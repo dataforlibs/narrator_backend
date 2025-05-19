@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Model Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0"></script>
+</head>
+<body>
+  <h1>TensorFlow.js Model Test</h1>
+  <div id="status">Loading model...</div>
+  
+  <script>
+    async function loadAndTestModel() {
+      const statusElement = document.getElementById('status');
+      
+      try {
+        // Try to load the model - adjust path as needed
+        statusElement.innerText = 'Attempting to load model...';
+        const modelPath = '/tfjs_model/model.json';
+        console.log('Loading from:', modelPath);
+        
+        // Try both loading methods
+        let model;
+        try {
+          console.log('Trying as graph model...');
+          model = await tf.loadGraphModel(modelPath);
+        } catch (graphError) {
+          console.log('Graph model failed, trying layers model...');
+          model = await tf.loadLayersModel(modelPath);
+        }
+        
+        statusElement.innerText = 'Model loaded successfully!';
+        console.log('Model loaded:', model);
+        
+        // Optional: Test a simple prediction if you want
+      } catch (error) {
+        statusElement.innerText = 'Error loading model: ' + error.message;
+        console.error('Error details:', error);
+      }
+    }
+    
+    // Run when page loads
+    window.addEventListener('load', loadAndTestModel);
+  </script>
+</body>
+</html>

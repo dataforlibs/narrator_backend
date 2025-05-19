@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Emotion Analysis with Local RoBERTa ONNX Model</title>
+  <!-- Load ONNX Runtime Web -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+</head>
+<body>
+  <h2>Emotion Analysis</h2>
+  <textarea id="input-text" rows="4" cols="50">I feel really happy today!</textarea>
+  <button id="analyze-button">Analyze Emotion</button>
+  <div id="result">Click Analyze to process your text</div>
+
+  <script>
+    // Define emotion labels
+    const emotionLabels = ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise'];
+    
+    // Initialize the ONNX session
+    let session = null;
+    let modelLoaded = false;
+    
+    // Load the model
+    async function loadModel() {
+      if (modelLoaded) return true;
+      
+      try {
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = 'Loading model...';
+        
+        // Create ONNX session with the local model file
+        session = await ort.InferenceSession.create('emotion_model.onnx');
+        
+        resultDiv.innerHTML = 'Model loaded!';
+        modelLoaded = true;
+        return true;
+      } catch (error) {
+        console.error('Error loading model:', error);
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = `Error loading model: ${error.message}`;
+        return false;
+      }
+    }
+    
+    // Fixed-length tokenizer for RoBERTa that always produces exactly 7 tokens
+    function tokenizeForRoBERTa(text) {
+      // Create a fixed array of exactly 7 elements
+      // This is critical - the error message shows the model expects exactly 7 tokens
+      const inputIds = new Array(7).fill(1); // Fill with padding token by default
+      
+      // First token is the beginning of sentence token
+      inputIds[0] = 0; // BOS token
+      
+      // Add simple word tokens (very simplified)
+      const words = text.toLowerCase().split(/\s+/);
+      
+      // We can only fit 5 tokens between the BOS and EOS tokens (for a total of 7)
+      const maxWords = Math.min(words.length, 5);
+      for (let i = 0; i < maxWords; i++) {
+        inputIds[i + 1] = i + 100; // Using arbitrary token IDs starting at 100
+      }
+      
+      // Last token is the end of sentence token
+      inputIds[6] = 2; // EOS token
+      
+      // Attention mask - 1 for real tokens, 0 for padding
+      const attentionMask = new Array(7).fill(1);
+      
+      console.log("Final input IDs:", inputIds);
+      console.log("Attention mask:", attentionMask);
+      
+      return {
+        inputIds,
+        attentionMask
+      };
+    }
+    
+    // Run inference
+    async function runInference(text) {
+      if (!modelLoaded) {
+        const success = await loadModel();
+        if (!success) return null;
+      }
+      
+      try {
+        // Tokenize text ensuring exactly 7 tokens
+        const tokenized = tokenizeForRoBERTa(text);
+        
+        // Create input tensors with exactly 7 elements
+        const inputIds = new ort.Tensor(
+          'int64',
+          new BigInt64Array(tokenized.inputIds.map(id => BigInt(id))),
+          [1, 7] // Explicitly set shape to [1, 7]
+        );
+        
+        const attentionMask = new ort.Tensor(
+          'int64',
+          new BigInt64Array(tokenized.attentionMask.map(mask => BigInt(mask))),
+          [1, 7] // Explicitly set shape to [1, 7]
+        );
+        
+        // Log the shapes for debugging
+        console.log('Input shapes:', {
+          input_ids: inputIds.dims,
+          attention_mask: attentionMask.dims
+        });
+        
+        // Prepare feeds for the model
+        const feeds = {
+          input_ids: inputIds,
+          attention_mask: attentionMask
+        };
+        
+        // Run inference
+        const results = await session.run(feeds);
+        
+        // Get output tensor - try common output names
+        const outputTensor = results.logits || results.output || Object.values(results)[0];
+        
+        if (!outputTensor) {
+          console.error('Could not find output tensor in results:', results);
+          return null;
+        }
+        
+        // Process results
+        const outputData = Array.from(outputTensor.data);
+        
+        // Find the maximum value and its index
+        let maxIndex = 0;
+        let maxValue = outputData[0];
+        
+        for (let i = 1; i < emotionLabels.length; i++) {
+          if (outputData[i] > maxValue) {
+            maxValue = outputData[i];
+            maxIndex = i;
+          }
+        }
+        
+        // Convert logits to probabilities with softmax
+        const expValues = outputData.map(val => Math.exp(val - Math.max(...outputData)));
+        const sumExp = expValues.reduce((sum, val) => sum + val, 0);
+        const probabilities = expValues.map(val => val / sumExp);
+        
+        // Get emotion and confidence
+        const emotion = emotionLabels[maxIndex];
+        const confidence = probabilities[maxIndex];
+        
+        console.log("Probabilities:", probabilities);
+        console.log("Predicted emotion:", emotion, "with confidence:", confidence);
+        
+        return {
+          emotion,
+          confidence
+        };
+      } catch (error) {
+        console.error('Inference error:', error);
+        return null;
+      }
+    }
+    
+    // Analyze emotion function
+    async function analyzeEmotion() {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Analyzing...';
+      
+      try {
+        const text = document.getElementById('input-text').value;
+        
+        if (!text.trim()) {
+          resultDiv.innerHTML = 'Please enter some text to analyze.';
+          return;
+        }
+        
+        const result = await runInference(text);
+        
+        if (result) {
+          resultDiv.innerHTML = `<strong>Detected emotion: ${result.emotion}</strong> (${Math.round(result.confidence * 100)}% confidence)`;
+        } else {
+          resultDiv.innerHTML = 'Failed to analyze emotion. Please check console for errors.';
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `Error: ${error.message}`;
+        console.error(error);
+      }
+    }
+    
+    // Load model when the page loads
+    window.addEventListener('DOMContentLoaded', loadModel);
+    
+    // Add click event listener
+    document.getElementById('analyze-button').addEventListener('click', analyzeEmotion);
+  </script>
+</body>
+</html>

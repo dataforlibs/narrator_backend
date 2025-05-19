@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Emotion Analysis with TensorFlow.js</title>
+  <!-- Load TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+  <!-- Load the Transformers.js library correctly -->
+  <script src="https://cdn.jsdelivr.net/npm/@huggingface/inference@1.5.1/dist/umd/index.min.js"></script>
+</head>
+<body>
+  <h2>Emotion Analysis</h2>
+  <textarea id="input-text" rows="4" cols="50">I feel really happy today!</textarea>
+  <button id="analyze-button">Analyze Emotion</button>
+  <div id="result"></div>
+
+  <script>
+    const analyzeEmotion = async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Analyzing...';
+      
+      try {
+        // Create a Hugging Face Inference client
+        // Note: You'll need a Hugging Face API token
+        const HF_API_TOKEN = ""; // Insert your Hugging Face API token here
+        const hf = new HuggingFaceInference(HF_API_TOKEN);
+        
+        const text = document.getElementById('input-text').value;
+        
+        // Use the text-classification task with the emotion model
+        const result = await hf.textClassification({
+          model: 'j-hartmann/emotion-english-distilroberta-base',
+          inputs: text
+        });
+        
+        resultDiv.innerHTML = `Detected emotion: ${result[0].label} (${Math.round(result[0].score * 100)}% confidence)`;
+      } catch (error) {
+        resultDiv.innerHTML = `Error: ${error.message}`;
+        console.error(error);
+      }
+    };
+
+    document.getElementById('analyze-button').addEventListener('click', analyzeEmotion);
+  </script>
+</body>
+</html>

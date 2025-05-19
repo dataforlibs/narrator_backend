@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Emotion Analysis with RoBERTa</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@transformers/transformers@2.3.0"></script>
+</head>
+<body>
+  <h2>Emotion Analysis</h2>
+  <textarea id="input-text" rows="4" cols="50">I feel really happy today!</textarea>
+  <button id="analyze-button">Analyze Emotion</button>
+  <div id="result"></div>
+
+  <script>
+    const analyzeEmotion = async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Analyzing...';
+      
+      try {
+        // Load the pipeline directly from Hugging Face
+        const classifier = await pipeline(
+          'text-classification',
+          'j-hartmann/emotion-english-distilroberta-base'
+        );
+        
+        const text = document.getElementById('input-text').value;
+        const result = await classifier(text);
+        
+        resultDiv.innerHTML = `Detected emotion: ${result[0].label} (${Math.round(result[0].score * 100)}% confidence)`;
+      } catch (error) {
+        resultDiv.innerHTML = `Error: ${error.message}`;
+        console.error(error);
+      }
+    };
+
+    document.getElementById('analyze-button').addEventListener('click', analyzeEmotion);
+  </script>
+</body>
+</html>

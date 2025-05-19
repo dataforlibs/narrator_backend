@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Emotion Analysis with TensorFlow.js</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #output {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            display: none;
+            margin: 10px 0;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        .emotion-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .emotion-bar {
+            height: 20px;
+            margin: 5px 0;
+            border-radius: 3px;
+            background-color: #4CAF50;
+        }
+        .emotion-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Text Emotion Analysis with TensorFlow.js</h1>
+    
+    <div class="container">
+        <h2>Model Information</h2>
+        <p>This example uses your TensorFlow.js model to predict emotions from text.</p>
+        <p><strong>Troubleshooting Tips:</strong> If you encounter errors, check that:</p>
+        <ul>
+            <li>Your model is a text emotion model (not an image or audio model)</li>
+            <li>Your browser supports TensorFlow.js (most modern browsers do)</li>
+            <li>You've uploaded the entire model directory (containing model.json and .bin files)</li>
+        </ul>
+        
+        <div class="input-group">
+            <h2>Upload TensorFlow.js Model</h2>
+            <p>Select the <strong>model.json</strong> file from your converted model directory:</p>
+            <input type="file" id="modelInput" accept=".json">
+            <div>Then select all <strong>.bin</strong> files from the same directory:</div>
+            <input type="file" id="weightsInput" accept=".bin" multiple>
+            <div id="modelStatus">No model selected</div>
+        </div>
+        
+        <div class="input-group">
+            <h2>Enter Text</h2>
+            <textarea id="textInput" placeholder="Type some text to analyze its emotional content..."></textarea>
+        </div>
+        
+        <div class="input-group">
+            <h2>Model Details (Optional)</h2>
+            <p>If you know details about your model, you can specify them here:</p>
+            <div>
+                <label for="outputLabels">Output Labels (comma-separated):</label>
+                <input type="text" id="outputLabels" placeholder="e.g., Anger,Fear,Joy,Love,Sadness,Surprise" 
+                       value="Anger,Fear,Joy,Love,Sadness,Surprise">
+            </div>
+            <div>
+                <label for="maxLength">Maximum Text Length:</label>
+                <input type="number" id="maxLength" value="100" min="1" max="1000">
+            </div>
+            <div>
+                <label for="vocabSize">Vocabulary Size:</label>
+                <input type="number" id="vocabSize" value="10000" min="1" max="100000">
+            </div>
+        </div>
+        
+        <button id="runButton" disabled>Analyze Emotion</button>
+        <div class="loader" id="loader"></div>
+        
+        <h3>Output:</h3>
+        <div id="output">Select your model files and enter text to analyze emotions...</div>
+        <div id="visualOutput"></div>
+    </div>
+    
+    <!-- Import TensorFlow.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+    
+    <script>
+        // Elements
+        const modelInput = document.getElementById('modelInput');
+        const weightsInput = document.getElementById('weightsInput');
+        const modelStatus = document.getElementById('modelStatus');
+        const textInput = document.getElementById('textInput');
+        const outputLabelsInput = document.getElementById('outputLabels');
+        const maxLengthInput = document.getElementById('maxLength');
+        const vocabSizeInput = document.getElementById('vocabSize');
+        const runButton = document.getElementById('runButton');
+        const loader = document.getElementById('loader');
+        const output = document.getElementById('output');
+        const visualOutput = document.getElementById('visualOutput');
+        
+        // Model storage
+        let model = null;
+        let modelJson = null;
+        let weightsFiles = [];
+        
+        // Handle model JSON file upload
+        modelInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Read the model.json file
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    modelJson = JSON.parse(event.target.result);
+                    modelStatus.innerText = `Model JSON loaded: ${file.name}`;
+                    checkModelReady();
+                } catch (error) {
+                    modelStatus.innerText = `Error loading model JSON: ${error.message}`;
+                    console.error('Error parsing model JSON:', error);
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        // Handle weights files upload
+        weightsInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            
+            // Store the weights files
+            weightsFiles = Array.from(files);
+            modelStatus.innerText += `\nWeights files loaded: ${files.length} file(s)`;
+            checkModelReady();
+        });
+        
+        // Handle text input
+        textInput.addEventListener('input', function() {
+            updateButtonState();
+        });
+        
+        // Check if all model files are ready
+        function checkModelReady() {
+            if (modelJson && weightsFiles.length > 0) {
+                // Create the model once we have both the JSON and weights
+                createModel();
+            }
+            updateButtonState();
+        }
+        
+        // Create the TensorFlow.js model
+        async function createModel() {
+            try {
+                // Create a weights map from the weights files
+                const weightsMap = {};
+                for (const file of weightsFiles) {
+                    const weightId = file.name;
+                    const weightData = await file.arrayBuffer();
+                    weightsMap[weightId] = weightData;
+                }
+                
+                // Load the model from the JSON and weights
+                model = await tf.loadLayersModel(
+                    tf.io.fromMemory(modelJson, weightsMap)
+                );
+                
+                modelStatus.innerText = `Model loaded successfully! Ready to analyze text.`;
+                updateButtonState();
+            } catch (error) {
+                modelStatus.innerText = `Error loading model: ${error.message}`;
+                console.error('Error loading TensorFlow.js model:', error);
+            }
+        }
+        
+        // Update button state
+        function updateButtonState() {
+            runButton.disabled = !(model && textInput.value.trim().length > 0);
+        }
+        
+        // Get emotion labels
+        function getEmotionLabels() {
+            const labels = outputLabelsInput.value.split(',').map(l => l.trim()).filter(l => l);
+            return labels.length > 0 ? labels : ['Anger', 'Fear', 'Joy', 'Love', 'Sadness', 'Surprise'];
+        }
+        
+        // Simple tokenization function
+        function tokenize(text, maxLength = 100) {
+            // Lowercase and remove punctuation
+            const cleanText = text.toLowerCase().replace(/[^\w\s]/g, '');
+            
+            // Split into words
+            const words = cleanText.split(/\s+/).filter(word => word.length > 0);
+            
+            // Create a simple vocabulary (this is a simplified approach)
+            // In a real implementation, you'd use the same vocabulary as during training
+            const vocabSize = parseInt(vocabSizeInput.value, 10);
+            
+            // Create a simple hash function for word to index mapping
+            function hashWord(word) {
+                let hash = 0;
+                for (let i = 0; i < word.length; i++) {
+                    hash = ((hash << 5) - hash) + word.charCodeAt(i);
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                // Use modulo to keep within vocab size (reserve 0 for padding)
+                return Math.abs(hash % (vocabSize - 1)) + 1;
+            }
+            
+            // Convert words to token indices
+            const tokens = words.map(word => hashWord(word));
+            
+            // Pad or truncate to fixed length
+            const paddedTokens = tokens.slice(0, maxLength);
+            while (paddedTokens.length < maxLength) {
+                paddedTokens.push(0); // Padding token
+            }
+            
+            return paddedTokens;
+        }
+        
+        // Run model prediction
+        async function runModel() {
+            try {
+                if (!model) {
+                    output.innerText = 'Error: Model not loaded.';
+                    return;
+                }
+                
+                const text = textInput.value.trim();
+                if (!text) {
+                    output.innerText = 'Error: Please enter some text to analyze.';
+                    return;
+                }
+                
+                // Update emotion labels
+                const emotionLabels = getEmotionLabels();
+                
+                // Display loader
+                loader.style.display = 'block';
+                output.innerText = 'Processing text...';
+                visualOutput.innerHTML = '';
+                
+                // Preprocess text
+                const maxLength = parseInt(maxLengthInput.value, 10);
+                const tokens = tokenize(text, maxLength);
+                console.log('Tokenized input:', tokens);
+                
+                // Create tensor from tokens
+                const inputTensor = tf.tensor2d([tokens], [1, tokens.length]);
+                
+                // Run model prediction
+                output.innerText = 'Running model prediction...';
+                const prediction = await model.predict(inputTensor);
+                
+                // Get results as array
+                const results = await prediction.data();
+                console.log('Raw prediction results:', results);
+                
+                // Display results
+                displayResults(results, emotionLabels);
+                
+                // Clean up tensors
+                inputTensor.dispose();
+                prediction.dispose();
+                
+            } catch (error) {
+                output.innerText = `Error running model: ${error.message}\n\n` +
+                                  'This could be due to a mismatch between the input format required by your model ' +
+                                  'and the preprocessing in this example. You may need to adjust the tokenization ' +
+                                  'or input processing to match your specific model requirements.';
+                console.error('Error running TensorFlow.js model:', error);
+            } finally {
+                // Hide loader
+                loader.style.display = 'none';
+            }
+        }
+        
+        // Display results
+        function displayResults(results, emotionLabels) {
+            // Create a result message
+            let resultText = 'Emotion Analysis Results:\n\n';
+            
+            // Create array of [label, probability] pairs
+            const predictions = [];
+            
+            // Use provided labels if they match output size, otherwise use generic labels
+            const labels = emotionLabels.length === results.length ? 
+                        emotionLabels : 
+                        Array.from({length: results.length}, (_, i) => `Emotion ${i+1}`);
+            
+            for (let i = 0; i < labels.length && i < results.length; i++) {
+                // Get the value
+                let value = results[i];
+                
+                // Store the prediction
+                predictions.push({ label: labels[i], value: value });
+            }
+            
+            // Apply softmax if needed (for logit outputs)
+            const maxValue = Math.max(...predictions.map(p => p.value));
+            const usesSoftmax = maxValue > 10 || predictions.some(p => p.value < 0);
+            
+            if (usesSoftmax) {
+                // Apply softmax
+                const expValues = predictions.map(p => Math.exp(p.value - maxValue)); // Subtract max for numerical stability
+                const sumExp = expValues.reduce((a, b) => a + b, 0);
+                predictions.forEach((p, i) => {
+                    p.probability = expValues[i] / sumExp;
+                });
+            } else {
+                // Values are already probabilities
+                predictions.forEach(p => {
+                    p.probability = Math.max(0, Math.min(1, p.value)); // Ensure between 0-1
+                });
+            }
+            
+            // Sort by probability (highest first)
+            predictions.sort((a, b) => b.probability - a.probability);
+            
+            // Get top emotion
+            const topEmotion = predictions[0];
+            resultText += `Primary emotion: ${topEmotion.label} (${(topEmotion.probability * 100).toFixed(2)}%)\n\n`;
+            
+            // List all emotions
+            resultText += 'All emotions detected:\n';
+            predictions.forEach((pred) => {
+                const percentage = (pred.probability * 100).toFixed(2);
+                resultText += `- ${pred.label}: ${percentage}%\n`;
+            });
+            
+            // Include raw values for debugging
+            resultText += '\nRaw model output values:\n';
+            predictions.forEach((pred) => {
+                resultText += `- ${pred.label}: ${pred.value.toFixed(4)}\n`;
+            });
+            
+            // Display the result
+            output.innerText = resultText;
+            
+            // Create visual representation
+            visualOutput.innerHTML = '';
+            predictions.forEach(pred => {
+                const percentage = (pred.probability * 100).toFixed(2);
+                const div = document.createElement('div');
+                div.className = 'emotion-result';
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'emotion-label';
+                labelDiv.innerHTML = `<span>${pred.label}</span><span>${percentage}%</span>`;
+                
+                const barContainer = document.createElement('div');
+                barContainer.style.width = '100%';
+                barContainer.style.backgroundColor = '#eee';
+                barContainer.style.borderRadius = '3px';
+                
+                const bar = document.createElement('div');
+                bar.className = 'emotion-bar';
+                bar.style.width = `${percentage}%`;
+                
+                barContainer.appendChild(bar);
+                div.appendChild(labelDiv);
+                div.appendChild(barContainer);
+                
+                visualOutput.appendChild(div);
+            });
+        }
+        
+        // Add event listener to the run button
+        runButton.addEventListener('click', runModel);
+    </script>
+</body>
+</html>

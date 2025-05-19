@@ -1,0 +1,384 @@
+    <script>
+        // Define emotion labels
+        const emotionLabels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral'];
+        
+        // Elements
+        const modelInput = document.getElementById('modelInput');
+        const modelStatus = document.getElementById('modelStatus');
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const runButton = document.getElementById('runButton');
+        const loader = document.getElementById('loader');
+        const output = document.getElementById('output');
+        
+        // Model and image data
+        let modelURL = null;
+        let imageData = null;
+        
+        // Handle model file upload
+        modelInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Create object URL for the model file
+            if (modelURL) {
+                URL.revokeObjectURL(modelURL);
+            }
+            modelURL = URL.createObjectURL(file);
+            modelStatus.innerText = `Model selected: ${file.name}`;
+            
+            // Enable the run button if both model and image are selected
+            updateButtonState();
+        });
+        
+        // Handle image upload
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                imagePreview.src = event.target.result;
+                imagePreview.style.display = 'block';
+                output.innerText = 'Image loaded. Select a model file if not already selected.';
+                
+                // Create a temporary image to get pixel data
+                const img = new Image();
+                img.onload = function() {
+                    // Create canvas to get image data
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Set canvas dimensions to match model input requirements
+                    // Common size for emotion recognition models - adjust if needed
+                    canvas.width = 48;
+                    canvas.height = 48;
+                    
+                    // Draw and resize image to canvas
+                    ctx.drawImage(img, 0, 0, 48, 48);
+                    
+                    // Get image data
+                    imageData = ctx.getImageData(0, 0, 48, 48);
+                    
+                    // Enable the run button if both model and image are selected
+                    updateButtonState();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // Update button state
+        function updateButtonState() {
+            runButton.disabled = !(modelURL && imageData);
+        }
+        
+        // Function to run the ONNX model
+        async function runOnnxModel() {
+            try {
+                if (!modelURL) {
+                    output.innerText = 'Error: No model file selected.';
+                    return;
+                }
+                
+                if (!imageData) {
+                    output.innerText = 'Error: No image data available.';
+                    return;
+                }
+                
+                // Display loader
+                loader.style.display = 'block';
+                output.innerText = 'Processing image...';
+                
+                // Preprocess image data for the model
+                // Adjust preprocessing according to your model's requirements
+                const inputData = preprocessImageData(imageData);
+                
+                // Set up ONNX Runtime options
+                const options = {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                };
+                
+                // Create an inference session with your model
+                output.innerText = 'Loading model...';
+                const session = await ort.InferenceSession.create(modelURL, options);
+                
+                // Get input and output details
+                output.innerText = 'Creating inference session...';
+                const inputNames = session.inputNames;
+                const outputNames = session.outputNames;
+                
+                if (inputNames.length === 0) {
+                    throw new Error('Model has no inputs');
+                }
+                
+                const inputName = inputNames[0];
+                const inputShape = session._inputs[0].dims;
+                
+                // Create input tensor
+                // Note: We<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Recognition with ONNX Runtime Web</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #output {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            display: none;
+            margin: 10px 0;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 10px;
+            display: none;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Emotion Recognition with ONNX Runtime Web</h1>
+    
+    <div class="container">
+        <h2>Model Information</h2>
+        <p>This example uses your emotion_model.onnx file to predict emotions from facial images.</p>
+        
+        <div class="input-group">
+            <h2>Select Model File</h2>
+            <input type="file" id="modelInput" accept=".onnx">
+            <div id="modelStatus">No model selected</div>
+        </div>
+
+        <div class="input-group">
+            <h2>Select Image</h2>
+            <input type="file" id="imageInput" accept="image/*">
+            <img id="imagePreview" alt="Image Preview">
+        </div>
+        
+        <button id="runButton" disabled>Run Emotion Recognition</button>
+        <div class="loader" id="loader"></div>
+        
+        <h3>Output:</h3>
+        <div id="output">Upload a model file and an image to see results...</div>
+    </div>
+    
+    <!-- Import ONNX Runtime Web from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.16.0/ort.min.js"></script>
+    
+    <script>
+        // Define emotion labels
+        const emotionLabels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral'];
+        
+        // Elements
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const runButton = document.getElementById('runButton');
+        const loader = document.getElementById('loader');
+        const output = document.getElementById('output');
+        
+        // Image data
+        let imageData = null;
+        
+        // Handle image upload
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                imagePreview.src = event.target.result;
+                imagePreview.style.display = 'block';
+                runButton.disabled = false;
+                output.innerText = 'Image loaded. Click "Run Emotion Recognition" to analyze.';
+                
+                // Create a temporary image to get pixel data
+                const img = new Image();
+                img.onload = function() {
+                    // Create canvas to get image data
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Set canvas dimensions to match model input requirements
+                    // Assuming the model expects 48x48 images - adjust if different
+                    canvas.width = 48;
+                    canvas.height = 48;
+                    
+                    // Draw and resize image to canvas
+                    ctx.drawImage(img, 0, 0, 48, 48);
+                    
+                    // Get image data
+                    imageData = ctx.getImageData(0, 0, 48, 48);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // Function to run the ONNX model
+        async function runOnnxModel() {
+            try {
+                if (!imageData) {
+                    output.innerText = 'Error: No image data available.';
+                    return;
+                }
+                
+                // Display loader
+                loader.style.display = 'block';
+                output.innerText = 'Processing image...';
+                
+                // Preprocess image data for the model
+                // This preprocessing depends on your model's requirements
+                const inputData = preprocessImageData(imageData);
+                
+                // Set up ONNX Runtime options
+                const options = {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                };
+                
+                // Create an inference session with your model
+                output.innerText = 'Loading emotion_model.onnx...';
+                const session = await ort.InferenceSession.create('emotion_model.onnx', options);
+                
+                // Get input details
+                output.innerText = 'Creating inference session...';
+                const inputNames = session.inputNames;
+                const outputNames = session.outputNames;
+                
+                if (inputNames.length === 0) {
+                    throw new Error('Model has no inputs');
+                }
+                
+                const inputName = inputNames[0];
+                const inputShape = session._inputs[0].dims;
+                
+                // Create input tensor
+                output.innerText = 'Preparing input tensor...';
+                const inputTensor = new ort.Tensor('float32', inputData, inputShape);
+                
+                // Create feeds with the input name from the model
+                const feeds = {};
+                feeds[inputName] = inputTensor;
+                
+                // Run inference
+                output.innerText = 'Running inference...';
+                const results = await session.run(feeds);
+                
+                // Process and display results
+                displayResults(results, outputNames[0]);
+                
+            } catch (error) {
+                output.innerText = 'Error: ' + error.message;
+                console.error('Error running ONNX model:', error);
+            } finally {
+                // Hide loader
+                loader.style.display = 'none';
+            }
+        }
+        
+        // Preprocess image data for the model
+        function preprocessImageData(imageData) {
+            // Get the raw pixel data
+            const { data, width, height } = imageData;
+            
+            // Create a Float32Array for the processed data
+            // Assuming grayscale input with shape [1, 1, 48, 48]
+            const processedData = new Float32Array(1 * 1 * height * width);
+            
+            // Convert RGB to grayscale and normalize to [0,1] or [-1,1] depending on your model
+            // This is just an example - adjust according to your model's requirements
+            let idx = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                // Convert to grayscale using average method
+                const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                
+                // Normalize to [0,1]
+                processedData[idx++] = gray / 255.0;
+            }
+            
+            return processedData;
+        }
+        
+        // Display results
+        function displayResults(results, outputName) {
+            // Get the output data
+            const outputData = results[outputName].data;
+            
+            // Create a result message
+            let resultText = 'Emotion Prediction Results:\n\n';
+            
+            // Create array of [label, probability] pairs
+            const predictions = emotionLabels.map((label, index) => {
+                return { label, probability: outputData[index] };
+            });
+            
+            // Sort by probability (highest first)
+            predictions.sort((a, b) => b.probability - a.probability);
+            
+            // Get top emotion
+            const topEmotion = predictions[0];
+            resultText += `Top emotion detected: ${topEmotion.label} (${(topEmotion.probability * 100).toFixed(2)}%)\n\n`;
+            
+            // List all emotions
+            resultText += 'All emotions detected:\n';
+            predictions.forEach((pred) => {
+                const percentage = (pred.probability * 100).toFixed(2);
+                resultText += `- ${pred.label}: ${percentage}%\n`;
+            });
+            
+            // Display the result
+            output.innerText = resultText;
+        }
+        
+        // Add event listener to the run button
+        runButton.addEventListener('click', runOnnxModel);
+    </script>
+</body>
+</html>

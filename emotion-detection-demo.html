@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Detection with TensorFlow.js</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        .card {
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        #textInput {
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            width: 100%;
+            resize: vertical;
+            min-height: 100px;
+        }
+        button {
+            background-color: #3498db;
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #result {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            min-height: 100px;
+        }
+        .status {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        .emotion-bar {
+            height: 20px;
+            margin: 5px 0;
+            background-color: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .emotion-fill {
+            height: 100%;
+            background-color: #3498db;
+            transition: width 0.5s ease-out;
+        }
+        .emotion-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .emotion-container {
+            margin-top: 20px;
+        }
+        #webcamContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        #webcam {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Emotion Detection with TensorFlow.js</h1>
+        
+        <div class="card">
+            <h2>Model Information</h2>
+            <p>This demo uses a Hugging Face emotion detection model converted to TensorFlow.js format.</p>
+            <p id="modelStatus" class="status">Loading model, please wait...</p>
+        </div>
+        
+        <div class="card input-section">
+            <h2>Text Input</h2>
+            <p>Enter text below to analyze its emotional content:</p>
+            <textarea id="textInput" placeholder="Type or paste text here to analyze...">I'm so excited to see this working! It's amazing how we can run AI models directly in the browser now.</textarea>
+            <button id="analyzeText">Analyze Emotions</button>
+            
+            <div id="textResults" style="display: none;" class="emotion-container">
+                <h3>Detected Emotions (Text):</h3>
+                <div id="emotionResults"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Status</h2>
+            <div id="status" class="status">Waiting for model to load...</div>
+        </div>
+    </div>
+
+    <!-- Load TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
+    
+    <!-- For tokenization, we use a simple implementation -->
+    <script>
+        // Model related variables
+        let model;
+        let isModelLoading = false;
+        let modelLoaded = false;
+        
+        // Emotion labels (adjust based on your specific model)
+        const emotionLabels = [
+            'anger', 'disgust', 'fear', 'joy', 
+            'neutral', 'sadness', 'surprise'
+        ];
+        
+        // Set status message
+        function setStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // Set model status
+        function setModelStatus(message) {
+            document.getElementById('modelStatus').textContent = message;
+        }
+        
+        // Simple tokenizer function (actual implementation depends on your model)
+        function tokenize(text) {
+            // This is a very simple tokenization - your model may need more specific tokenization
+            const tokens = text.toLowerCase().split(/\s+/);
+            
+            // Convert to tensor (simplified - actual implementation would need proper tokenizer)
+            // This is a placeholder - with real Hugging Face models, you'd need proper tokenization
+            const inputIds = new Array(128).fill(0);
+            const attentionMask = new Array(128).fill(0);
+            
+            // Fill with simple word indices (this is a simplified example)
+            for (let i = 0; i < Math.min(tokens.length, 128); i++) {
+                inputIds[i] = tokens[i].length > 0 ? tokens[i].charCodeAt(0) % 1000 : 0;
+                attentionMask[i] = 1;
+            }
+            
+            return {
+                input_ids: tf.tensor2d([inputIds], [1, 128]),
+                attention_mask: tf.tensor2d([attentionMask], [1, 128])
+            };
+        }
+        
+        // Display emotion results with nice bars
+        function displayEmotions(emotions) {
+            const resultsDiv = document.getElementById('emotionResults');
+            resultsDiv.innerHTML = '';
+            
+            emotions.forEach(emotion => {
+                const container = document.createElement('div');
+                container.style.marginBottom = '15px';
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'emotion-label';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = emotion.label;
+                
+                const valueSpan = document.createElement('span');
+                valueSpan.textContent = `${(emotion.score * 100).toFixed(2)}%`;
+                
+                labelDiv.appendChild(nameSpan);
+                labelDiv.appendChild(valueSpan);
+                
+                const barContainer = document.createElement('div');
+                barContainer.className = 'emotion-bar';
+                
+                const bar = document.createElement('div');
+                bar.className = 'emotion-fill';
+                bar.style.width = `${emotion.score * 100}%`;
+                
+                barContainer.appendChild(bar);
+                
+                container.appendChild(labelDiv);
+                container.appendChild(barContainer);
+                
+                resultsDiv.appendChild(container);
+            });
+            
+            document.getElementById('textResults').style.display = 'block';
+        }
+        
+        // Analyze text for emotions
+        async function analyzeText() {
+            const textInput = document.getElementById('textInput').value;
+            
+            if (!textInput.trim()) {
+                setStatus('Please enter some text to analyze.');
+                return;
+            }
+            
+            if (!modelLoaded) {
+                setStatus('Model is not loaded yet. Please wait.');
+                return;
+            }
+            
+            try {
+                setStatus('Analyzing emotions...');
+                
+                // Tokenize input text
+                const tokens = tokenize(textInput);
+                
+                // Run model inference
+                const result = await model.executeAsync(tokens);
+                
+                // Get logits from the result (format depends on your specific model)
+                let logits;
+                if (Array.isArray(result)) {
+                    // Some models return multiple tensors, we need to find the logits
+                    logits = result.find(tensor => tensor.shape.length === 2 && 
+                                          tensor.shape[1] === emotionLabels.length);
+                } else {
+                    logits = result;
+                }
+                
+                // Convert to probabilities
+                const probabilities = tf.softmax(logits).dataSync();
+                
+                // Map to emotion labels
+                const emotions = emotionLabels.map((label, i) => ({
+                    label,
+                    score: probabilities[i]
+                })).sort((a, b) => b.score - a.score);
+                
+                // Display results
+                displayEmotions(emotions);
+                
+                setStatus('Analysis complete!');
+                
+                // Clean up tensors
+                if (Array.isArray(result)) {
+                    result.forEach(tensor => tensor.dispose());
+                } else {
+                    result.dispose();
+                }
+                
+                Object.values(tokens).forEach(tensor => tensor.dispose());
+                
+            } catch (error) {
+                console.error('Error during analysis:', error);
+                setStatus(`Error during analysis: ${error.message}`);
+            }
+        }
+        
+        // Load model
+        async function loadModel() {
+            if (isModelLoading) return;
+            
+            isModelLoading = true;
+            setModelStatus('Loading model...');
+            setStatus('Loading emotion detection model, please wait...');
+            
+            try {
+                // Update this path to where your model is stored
+                model = await tf.loadLayersModel('./tfjs_model/model.json');
+                
+                modelLoaded = true;
+                setModelStatus('Model loaded successfully!');
+                setStatus('Model loaded! Ready to analyze emotions.');
+                
+                // Enable buttons
+                document.getElementById('analyzeText').disabled = false;
+                
+            } catch (error) {
+                console.error('Error loading model:', error);
+                setModelStatus(`Error loading model: ${error.message}`);
+                setStatus('Failed to load model. Check console for errors.');
+            }
+            
+            isModelLoading = false;
+        }
+        
+        // Set up event listeners
+        window.addEventListener('DOMContentLoaded', () => {
+            // Button event listeners
+            document.getElementById('analyzeText').addEventListener('click', analyzeText);
+            
+            // Initially disable buttons until model loads
+            document.getElementById('analyzeText').disabled = true;
+            
+            // Load model
+            loadModel();
+        });
+    </script>
+</body>
+</html>

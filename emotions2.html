@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Emotion Analysis with RoBERTa</title>
+  <!-- Load Transformers.js from CDN (latest version) -->
+  <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest"></script>
+</head>
+<body>
+  <h2>Emotion Analysis</h2>
+  <textarea id="input-text" rows="4" cols="50">I feel really happy today!</textarea>
+  <button id="analyze-button">Analyze Emotion</button>
+  <div id="result">Model will load when you click the button...</div>
+
+  <script>
+    // Using the newer @huggingface/transformers library
+    const analyzeEmotion = async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Loading model...';
+      
+      try {
+        // Initialize the pipeline with the specific emotion model
+        const classifier = await transformers.pipeline(
+          'text-classification',
+          'j-hartmann/emotion-english-distilroberta-base'
+        );
+        
+        resultDiv.innerHTML = 'Analyzing...';
+        
+        const text = document.getElementById('input-text').value;
+        const result = await classifier(text);
+        
+        // Format the results
+        resultDiv.innerHTML = `<strong>Detected emotion: ${result[0].label}</strong> (${Math.round(result[0].score * 100)}% confidence)`;
+      } catch (error) {
+        resultDiv.innerHTML = `Error: ${error.message}`;
+        console.error(error);
+      }
+    };
+
+    document.getElementById('analyze-button').addEventListener('click', analyzeEmotion);
+  </script>
+</body>
+</html>
